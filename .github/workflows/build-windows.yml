@@ -1,13 +1,9 @@
-name: Build Windows EXE
+name: Build Windows Portable
 
 on:
   workflow_dispatch:
   push:
     branches: [ "main" ]
-    paths:
-      - "app.py"
-      - "requirements.txt"
-      - ".github/workflows/build-windows.yml"
 
 permissions:
   contents: read
@@ -17,14 +13,13 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
       - name: Install dependencies
         shell: pwsh
@@ -32,27 +27,71 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build single EXE
+      - name: Build EXE
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed `
             --name DaijishoArtworkManager `
             --collect-all PIL `
-            --collect-all webview `
             app.py
 
-      - name: Verify EXE
+      - name: Download Android Platform Tools
         shell: pwsh
         run: |
-          Get-Item "dist\DaijishoArtworkManager.exe" | Format-List Name,Length,FullName
-          if (-not (Test-Path "dist\DaijishoArtworkManager.exe")) {
-            throw "EXE was not created."
+          Invoke-WebRequest `
+            -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" `
+            -OutFile "platform-tools.zip"
+
+          Expand-Archive `
+            "platform-tools.zip" `
+            -DestinationPath "android-tools"
+
+      - name: Create Portable
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "portable" | Out-Null
+
+          Copy-Item `
+            "dist\DaijishoArtworkManager.exe" `
+            "portable\"
+
+          Copy-Item `
+            "android-tools\platform-tools\adb.exe" `
+            "portable\"
+
+          Copy-Item `
+            "android-tools\platform-tools\AdbWinApi.dll" `
+            "portable\"
+
+          Copy-Item `
+            "android-tools\platform-tools\AdbWinUsbApi.dll" `
+            "portable\"
+
+      - name: Verify Portable
+        shell: pwsh
+        run: |
+          Get-ChildItem "portable"
+
+          if (-not (Test-Path "portable\DaijishoArtworkManager.exe")) {
+            throw "DaijishoArtworkManager.exe missing"
           }
 
-      - name: Upload Windows EXE
+          if (-not (Test-Path "portable\adb.exe")) {
+            throw "adb.exe missing"
+          }
+
+          if (-not (Test-Path "portable\AdbWinApi.dll")) {
+            throw "AdbWinApi.dll missing"
+          }
+
+          if (-not (Test-Path "portable\AdbWinUsbApi.dll")) {
+            throw "AdbWinUsbApi.dll missing"
+          }
+
+      - name: Upload Portable
         uses: actions/upload-artifact@v4
         with:
-          name: DaijishoArtworkManager-Windows
-          path: dist/DaijishoArtworkManager.exe
+          name: DaijishoArtworkManager-Windows-Portable
+          path: portable/
           if-no-files-found: error
           retention-days: 30
