@@ -3,8 +3,11 @@ name: Build Windows EXE
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
+    paths:
+      - "app.py"
+      - "requirements.txt"
+      - ".github/workflows/build-windows.yml"
 
 permissions:
   contents: read
@@ -29,63 +32,27 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build Windows EXE
+      - name: Build single EXE
         shell: pwsh
         run: |
           pyinstaller --noconfirm --clean --onefile --windowed `
             --name DaijishoArtworkManager `
             --collect-all PIL `
+            --collect-all webview `
             app.py
 
-      - name: Download Android Platform Tools
+      - name: Verify EXE
         shell: pwsh
         run: |
-          Invoke-WebRequest `
-            -Uri "https://dl.google.com/android/repository/platform-tools-latest-windows.zip" `
-            -OutFile "platform-tools.zip"
-
-          Expand-Archive `
-            -Path "platform-tools.zip" `
-            -DestinationPath "android-tools"
-
-      - name: Create portable package
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "release"
-
-          Copy-Item `
-            "dist\DaijishoArtworkManager.exe" `
-            "release\DaijishoArtworkManager.exe"
-
-          Copy-Item `
-            "android-tools\platform-tools\adb.exe" `
-            "release\adb.exe"
-
-          Copy-Item `
-            "android-tools\platform-tools\AdbWinApi.dll" `
-            "release\AdbWinApi.dll"
-
-          Copy-Item `
-            "android-tools\platform-tools\AdbWinUsbApi.dll" `
-            "release\AdbWinUsbApi.dll"
-
-      - name: Verify package
-        shell: pwsh
-        run: |
-          Get-ChildItem "release"
-
-          if (-not (Test-Path "release\DaijishoArtworkManager.exe")) {
+          Get-Item "dist\DaijishoArtworkManager.exe" | Format-List Name,Length,FullName
+          if (-not (Test-Path "dist\DaijishoArtworkManager.exe")) {
             throw "EXE was not created."
           }
 
-          if (-not (Test-Path "release\adb.exe")) {
-            throw "ADB was not included."
-          }
-
-      - name: Upload portable Windows package
+      - name: Upload Windows EXE
         uses: actions/upload-artifact@v4
         with:
-          name: DaijishoArtworkManager-Windows-Portable
-          path: release/*
+          name: DaijishoArtworkManager-Windows
+          path: dist/DaijishoArtworkManager.exe
           if-no-files-found: error
           retention-days: 30
